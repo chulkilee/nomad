@@ -547,9 +547,15 @@ func (e *ConsulIngressConfigEntry) Copy() *ConsulIngressConfigEntry {
 	}
 }
 
-// ConsulTerminatingConfigEntry is not yet supported.
-// type ConsulTerminatingConfigEntry struct {
-// }
+// ConsulTerminatingConfigEntry represents the Consul Configuration Entry type
+// for a Terminating Gateway.
+//
+// https://www.consul.io/docs/agent/config-entries/terminating-gateway#available-fields
+type ConsulTerminatingConfigEntry struct {
+	// Namespace is not yet supported.
+	// Namespace string
+
+}
 
 // ConsulMeshConfigEntry is not yet supported.
 // type ConsulMeshConfigEntry struct {
