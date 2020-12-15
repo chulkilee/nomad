@@ -334,6 +334,11 @@ func TestService_ConsulGateway_Copy(t *testing.T) {
 				}},
 			},
 		},
+		Terminating: &ConsulTerminatingConfigEntry{
+			Services: []*ConsulLinkedService{{
+				Name: "linked-service1",
+			}},
+		},
 	}
 
 	t.Run("complete", func(t *testing.T) {
@@ -410,6 +415,50 @@ func TestService_ConsulIngressConfigEntry_Copy(t *testing.T) {
 				Name:  "service2",
 				Hosts: []string{"2.2.2.2"},
 			}},
+		}},
+	}
+
+	t.Run("complete", func(t *testing.T) {
+		result := entry.Copy()
+		require.Equal(t, entry, result)
+	})
+}
+
+func TestService_ConsulTerminatingConfigEntry_Canonicalize(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil", func(t *testing.T) {
+		c := (*ConsulTerminatingConfigEntry)(nil)
+		c.Canonicalize()
+		require.Nil(t, c)
+	})
+
+	t.Run("empty services", func(t *testing.T) {
+		c := &ConsulTerminatingConfigEntry{
+			Services: []*ConsulLinkedService{},
+		}
+		c.Canonicalize()
+		require.Nil(t, c.Services)
+	})
+}
+
+func TestService_ConsulTerminatingConfigEntry_Copy(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil", func(t *testing.T) {
+		result := (*ConsulIngressConfigEntry)(nil).Copy()
+		require.Nil(t, result)
+	})
+
+	entry := &ConsulTerminatingConfigEntry{
+		Services: []*ConsulLinkedService{{
+			Name: "servic1",
+		}, {
+			Name:     "service2",
+			CAFile:   "ca_file.pem",
+			CertFile: "cert_file.pem",
+			KeyFile:  "key_file.pem",
+			SNI:      "sni.terminating.consul",
 		}},
 	}
 

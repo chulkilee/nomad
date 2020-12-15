@@ -560,8 +560,8 @@ var (
 			ConnectTimeout:                  helper.TimeToPtr(1 * time.Second),
 			EnvoyGatewayBindTaggedAddresses: true,
 			EnvoyGatewayBindAddresses: map[string]*ConsulGatewayBindAddress{
-				"listener1": &ConsulGatewayBindAddress{Address: "10.0.0.1", Port: 2001},
-				"listener2": &ConsulGatewayBindAddress{Address: "10.0.0.1", Port: 2002},
+				"listener1": {Address: "10.0.0.1", Port: 2001},
+				"listener2": {Address: "10.0.0.1", Port: 2002},
 			},
 			EnvoyGatewayNoDefaultBind: true,
 			Config: map[string]interface{}{
@@ -591,6 +591,17 @@ var (
 			}},
 		},
 	}
+
+	consulTerminatingGateway1 = &ConsulGateway{
+		Proxy: &ConsulGatewayProxy{
+			ConnectTimeout: helper.TimeToPtr(1 * time.Second),
+		},
+		Terminating: &ConsulTerminatingConfigEntry{
+			Services: []*ConsulLinkedService{{
+				Name: "linked-service1",
+			}},
+		},
+	}
 )
 
 func TestConsulGateway_Copy(t *testing.T) {
@@ -608,6 +619,13 @@ func TestConsulGateway_Copy(t *testing.T) {
 		require.True(t, result.Equals(consulIngressGateway1))
 		require.True(t, consulIngressGateway1.Equals(result))
 	})
+
+	t.Run("as terminating", func(t *testing.T) {
+		result := consulTerminatingGateway1.Copy()
+		require.Equal(t, consulTerminatingGateway1, result)
+		require.True(t, result.Equals(consulTerminatingGateway1))
+		require.True(t, consulTerminatingGateway1.Equals(result))
+	})
 }
 
 func TestConsulGateway_Equals_ingress(t *testing.T) {
@@ -623,8 +641,8 @@ func TestConsulGateway_Equals_ingress(t *testing.T) {
 
 	original := consulIngressGateway1.Copy()
 
-	type gway = ConsulGateway
-	type tweaker = func(g *gway)
+	type cg = ConsulGateway
+	type tweaker = func(g *cg)
 
 	t.Run("reflexive", func(t *testing.T) {
 		require.True(t, original.Equals(original))
@@ -641,27 +659,27 @@ func TestConsulGateway_Equals_ingress(t *testing.T) {
 	// proxy stanza equality checks
 
 	t.Run("mod gateway timeout", func(t *testing.T) {
-		try(t, func(g *gway) { g.Proxy.ConnectTimeout = helper.TimeToPtr(9 * time.Second) })
+		try(t, func(g *cg) { g.Proxy.ConnectTimeout = helper.TimeToPtr(9 * time.Second) })
 	})
 
 	t.Run("mod gateway envoy_gateway_bind_tagged_addresses", func(t *testing.T) {
-		try(t, func(g *gway) { g.Proxy.EnvoyGatewayBindTaggedAddresses = false })
+		try(t, func(g *cg) { g.Proxy.EnvoyGatewayBindTaggedAddresses = false })
 	})
 
 	t.Run("mod gateway envoy_gateway_bind_addresses", func(t *testing.T) {
-		try(t, func(g *gway) {
+		try(t, func(g *cg) {
 			g.Proxy.EnvoyGatewayBindAddresses = map[string]*ConsulGatewayBindAddress{
-				"listener3": &ConsulGatewayBindAddress{Address: "9.9.9.9", Port: 9999},
+				"listener3": {Address: "9.9.9.9", Port: 9999},
 			}
 		})
 	})
 
 	t.Run("mod gateway envoy_gateway_no_default_bind", func(t *testing.T) {
-		try(t, func(g *gway) { g.Proxy.EnvoyGatewayNoDefaultBind = false })
+		try(t, func(g *cg) { g.Proxy.EnvoyGatewayNoDefaultBind = false })
 	})
 
 	t.Run("mod gateway config", func(t *testing.T) {
-		try(t, func(g *gway) {
+		try(t, func(g *cg) {
 			g.Proxy.Config = map[string]interface{}{
 				"foo": 2,
 			}
@@ -671,37 +689,41 @@ func TestConsulGateway_Equals_ingress(t *testing.T) {
 	// ingress config entry equality checks
 
 	t.Run("mod ingress tls", func(t *testing.T) {
-		try(t, func(g *gway) { g.Ingress.TLS = nil })
-		try(t, func(g *gway) { g.Ingress.TLS.Enabled = false })
+		try(t, func(g *cg) { g.Ingress.TLS = nil })
+		try(t, func(g *cg) { g.Ingress.TLS.Enabled = false })
 	})
 
 	t.Run("mod ingress listeners count", func(t *testing.T) {
-		try(t, func(g *gway) { g.Ingress.Listeners = g.Ingress.Listeners[:1] })
+		try(t, func(g *cg) { g.Ingress.Listeners = g.Ingress.Listeners[:1] })
 	})
 
 	t.Run("mod ingress listeners port", func(t *testing.T) {
-		try(t, func(g *gway) { g.Ingress.Listeners[0].Port = 7777 })
+		try(t, func(g *cg) { g.Ingress.Listeners[0].Port = 7777 })
 	})
 
 	t.Run("mod ingress listeners protocol", func(t *testing.T) {
-		try(t, func(g *gway) { g.Ingress.Listeners[0].Protocol = "tcp" })
+		try(t, func(g *cg) { g.Ingress.Listeners[0].Protocol = "tcp" })
 	})
 
 	t.Run("mod ingress listeners services count", func(t *testing.T) {
-		try(t, func(g *gway) { g.Ingress.Listeners[0].Services = g.Ingress.Listeners[0].Services[:1] })
+		try(t, func(g *cg) { g.Ingress.Listeners[0].Services = g.Ingress.Listeners[0].Services[:1] })
 	})
 
 	t.Run("mod ingress listeners services name", func(t *testing.T) {
-		try(t, func(g *gway) { g.Ingress.Listeners[0].Services[0].Name = "serviceX" })
+		try(t, func(g *cg) { g.Ingress.Listeners[0].Services[0].Name = "serviceX" })
 	})
 
 	t.Run("mod ingress listeners services hosts count", func(t *testing.T) {
-		try(t, func(g *gway) { g.Ingress.Listeners[0].Services[0].Hosts = g.Ingress.Listeners[0].Services[0].Hosts[:1] })
+		try(t, func(g *cg) { g.Ingress.Listeners[0].Services[0].Hosts = g.Ingress.Listeners[0].Services[0].Hosts[:1] })
 	})
 
 	t.Run("mod ingress listeners services hosts content", func(t *testing.T) {
-		try(t, func(g *gway) { g.Ingress.Listeners[0].Services[0].Hosts[0] = "255.255.255.255" })
+		try(t, func(g *cg) { g.Ingress.Listeners[0].Services[0].Hosts[0] = "255.255.255.255" })
 	})
+}
+
+func TestConsulGateway_Equals_terminating(t *testing.T) {
+	// todo
 }
 
 func TestConsulGateway_ingressServicesEqual(t *testing.T) {
@@ -775,6 +797,43 @@ func TestConsulGateway_Validate(t *testing.T) {
 			},
 		}).Validate()
 		require.EqualError(t, err, "Consul Ingress Gateway requires at least one listener")
+	})
+
+	t.Run("bad terminating config entry", func(t *testing.T) {
+		err := (&ConsulGateway{
+			Terminating: &ConsulTerminatingConfigEntry{
+				Services: nil,
+			},
+		}).Validate()
+		require.EqualError(t, err, "Consul Terminating Gateway requires at least one linked service")
+	})
+
+	t.Run("no config entry set", func(t *testing.T) {
+		err := (&ConsulGateway{
+			Ingress:     nil,
+			Terminating: nil,
+		}).Validate()
+		require.EqualError(t, err, "One Consul Gateway Configuration Entry must be set")
+	})
+
+	t.Run("multiple config entries set", func(t *testing.T) {
+		err := (&ConsulGateway{
+			Ingress: &ConsulIngressConfigEntry{
+				Listeners: []*ConsulIngressListener{{
+					Port:     1111,
+					Protocol: "tcp",
+					Services: []*ConsulIngressService{{
+						Name: "service1",
+					}},
+				}},
+			},
+			Terminating: &ConsulTerminatingConfigEntry{
+				Services: []*ConsulLinkedService{{
+					Name: "linked-service1",
+				}},
+			},
+		}).Validate()
+		require.EqualError(t, err, "One Consul Gateway Configuration Entry must be set")
 	})
 }
 
@@ -971,4 +1030,12 @@ func TestConsulIngressConfigEntry_Validate(t *testing.T) {
 		}).Validate()
 		require.NoError(t, err)
 	})
+}
+
+func TestConsulLinkedService_Validate(t *testing.T) {
+	// todo
+}
+
+func TestConsulTerminatingConfigEntry_Validate(t *testing.T) {
+	// todo
 }
