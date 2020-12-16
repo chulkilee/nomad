@@ -598,7 +598,13 @@ var (
 		},
 		Terminating: &ConsulTerminatingConfigEntry{
 			Services: []*ConsulLinkedService{{
-				Name: "linked-service1",
+				Name:     "linked-service1",
+				CAFile:   "ca.pem",
+				CertFile: "cert.pem",
+				KeyFile:  "key.pem",
+				SNI:      "service1.consul",
+			}, {
+				Name: "linked-service2",
 			}},
 		},
 	}
@@ -723,10 +729,55 @@ func TestConsulGateway_Equals_ingress(t *testing.T) {
 }
 
 func TestConsulGateway_Equals_terminating(t *testing.T) {
-	// todo
+	t.Parallel()
+
+	original := consulTerminatingGateway1.Copy()
+
+	type cg = ConsulGateway
+	type tweaker = func(c *cg)
+
+	t.Run("reflexive", func(t *testing.T) {
+		require.True(t, original.Equals(original))
+	})
+
+	try := func(t *testing.T, tweak tweaker) {
+		modifiable := original.Copy()
+		tweak(modifiable)
+		require.False(t, original.Equals(modifiable))
+		require.False(t, modifiable.Equals(original))
+		require.True(t, modifiable.Equals(modifiable))
+	}
+
+	// terminating config entry equality checks
+
+	t.Run("mod terminating services count", func(t *testing.T) {
+		try(t, func(g *cg) { g.Terminating.Services = g.Terminating.Services[:1] })
+	})
+
+	t.Run("mod terminating services name", func(t *testing.T) {
+		try(t, func(g *cg) { g.Terminating.Services[0].Name = "foo" })
+	})
+
+	t.Run("mod terminating services ca_file", func(t *testing.T) {
+		try(t, func(g *cg) { g.Terminating.Services[0].CAFile = "foo.pem" })
+	})
+
+	t.Run("mod terminating services cert_file", func(t *testing.T) {
+		try(t, func(g *cg) { g.Terminating.Services[0].CertFile = "foo.pem" })
+	})
+
+	t.Run("mod terminating services key_file", func(t *testing.T) {
+		try(t, func(g *cg) { g.Terminating.Services[0].KeyFile = "foo.pem" })
+	})
+
+	t.Run("mod terminating services sni", func(t *testing.T) {
+		try(t, func(g *cg) { g.Terminating.Services[0].SNI = "foo.consul" })
+	})
 }
 
 func TestConsulGateway_ingressServicesEqual(t *testing.T) {
+	t.Parallel()
+
 	igs1 := []*ConsulIngressService{{
 		Name:  "service1",
 		Hosts: []string{"host1", "host2"},
@@ -736,6 +787,7 @@ func TestConsulGateway_ingressServicesEqual(t *testing.T) {
 	}}
 
 	require.False(t, ingressServicesEqual(igs1, nil))
+	require.True(t, ingressServicesEqual(igs1, igs1))
 
 	reversed := []*ConsulIngressService{
 		igs1[1], igs1[0], // services reversed
@@ -755,6 +807,8 @@ func TestConsulGateway_ingressServicesEqual(t *testing.T) {
 }
 
 func TestConsulGateway_ingressListenersEqual(t *testing.T) {
+	t.Parallel()
+
 	ils1 := []*ConsulIngressListener{{
 		Port:     2000,
 		Protocol: "http",
@@ -780,6 +834,8 @@ func TestConsulGateway_ingressListenersEqual(t *testing.T) {
 }
 
 func TestConsulGateway_Validate(t *testing.T) {
+	t.Parallel()
+
 	t.Run("bad proxy", func(t *testing.T) {
 		err := (&ConsulGateway{
 			Proxy: &ConsulGatewayProxy{
@@ -838,6 +894,8 @@ func TestConsulGateway_Validate(t *testing.T) {
 }
 
 func TestConsulGatewayBindAddress_Validate(t *testing.T) {
+	t.Parallel()
+
 	t.Run("no address", func(t *testing.T) {
 		err := (&ConsulGatewayBindAddress{
 			Address: "",
@@ -864,6 +922,8 @@ func TestConsulGatewayBindAddress_Validate(t *testing.T) {
 }
 
 func TestConsulGatewayProxy_Validate(t *testing.T) {
+	t.Parallel()
+
 	t.Run("no timeout", func(t *testing.T) {
 		err := (&ConsulGatewayProxy{
 			ConnectTimeout: nil,
@@ -906,6 +966,8 @@ func TestConsulGatewayProxy_Validate(t *testing.T) {
 }
 
 func TestConsulIngressService_Validate(t *testing.T) {
+	t.Parallel()
+
 	t.Run("invalid name", func(t *testing.T) {
 		err := (&ConsulIngressService{
 			Name: "",
@@ -945,6 +1007,8 @@ func TestConsulIngressService_Validate(t *testing.T) {
 }
 
 func TestConsulIngressListener_Validate(t *testing.T) {
+	t.Parallel()
+
 	t.Run("invalid port", func(t *testing.T) {
 		err := (&ConsulIngressListener{
 			Port:     0,
@@ -1000,6 +1064,8 @@ func TestConsulIngressListener_Validate(t *testing.T) {
 }
 
 func TestConsulIngressConfigEntry_Validate(t *testing.T) {
+	t.Parallel()
+
 	t.Run("no listeners", func(t *testing.T) {
 		err := (&ConsulIngressConfigEntry{}).Validate()
 		require.EqualError(t, err, "Consul Ingress Gateway requires at least one listener")
@@ -1033,9 +1099,170 @@ func TestConsulIngressConfigEntry_Validate(t *testing.T) {
 }
 
 func TestConsulLinkedService_Validate(t *testing.T) {
-	// todo
+	t.Parallel()
+
+	t.Run("nil", func(t *testing.T) {
+		err := (*ConsulLinkedService)(nil).Validate()
+		require.Nil(t, err)
+	})
+
+	t.Run("missing name", func(t *testing.T) {
+		err := (&ConsulLinkedService{}).Validate()
+		require.EqualError(t, err, "Consul Linked Service requires Name")
+	})
+
+	t.Run("missing cafile", func(t *testing.T) {
+		err := (&ConsulLinkedService{
+			Name:     "linked-service1",
+			CertFile: "cert_file.pem",
+			KeyFile:  "key_file.pem",
+		}).Validate()
+		require.EqualError(t, err, "Consul Linked Service TLS requires CAFile")
+	})
+
+	t.Run("mutual cert key", func(t *testing.T) {
+		err := (&ConsulLinkedService{
+			Name:     "linked-service1",
+			CAFile:   "ca_file.pem",
+			CertFile: "cert_file.pem",
+		}).Validate()
+		require.EqualError(t, err, "Consul Linked Service TLS Cert and Key must both be set")
+	})
+
+	t.Run("sni without cafile", func(t *testing.T) {
+		err := (&ConsulLinkedService{
+			Name: "linked-service1",
+			SNI:  "service.consul",
+		}).Validate()
+		require.EqualError(t, err, "Consul Linked Service TLS SNI requires CAFile")
+	})
+
+	t.Run("minimal", func(t *testing.T) {
+		err := (&ConsulLinkedService{
+			Name: "linked-service1",
+		}).Validate()
+		require.NoError(t, err)
+	})
+
+	t.Run("tls minimal", func(t *testing.T) {
+		err := (&ConsulLinkedService{
+			Name:   "linked-service1",
+			CAFile: "ca_file.pem",
+		}).Validate()
+		require.NoError(t, err)
+	})
+
+	t.Run("tls mutual", func(t *testing.T) {
+		err := (&ConsulLinkedService{
+			Name:     "linked-service1",
+			CAFile:   "ca_file.pem",
+			CertFile: "cert_file.pem",
+			KeyFile:  "key_file.pem",
+		}).Validate()
+		require.NoError(t, err)
+	})
+
+	t.Run("tls sni", func(t *testing.T) {
+		err := (&ConsulLinkedService{
+			Name:   "linked-service1",
+			CAFile: "ca_file.pem",
+			SNI:    "linked-service.consul",
+		}).Validate()
+		require.NoError(t, err)
+	})
+
+	t.Run("tls complete", func(t *testing.T) {
+		err := (&ConsulLinkedService{
+			Name:     "linked-service1",
+			CAFile:   "ca_file.pem",
+			CertFile: "cert_file.pem",
+			KeyFile:  "key_file.pem",
+			SNI:      "linked-service.consul",
+		}).Validate()
+		require.NoError(t, err)
+	})
+}
+
+func TestConsulLinkedService_Copy(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, (*ConsulLinkedService)(nil).Copy())
+	require.Equal(t, &ConsulLinkedService{
+		Name:     "service1",
+		CAFile:   "ca.pem",
+		CertFile: "cert.pem",
+		KeyFile:  "key.pem",
+		SNI:      "service1.consul",
+	}, (&ConsulLinkedService{
+		Name:     "service1",
+		CAFile:   "ca.pem",
+		CertFile: "cert.pem",
+		KeyFile:  "key.pem",
+		SNI:      "service1.consul",
+	}).Copy())
+}
+
+func TestConsulLinkedService_linkedServicesEqual(t *testing.T) {
+	t.Parallel()
+
+	services := []*ConsulLinkedService{{
+		Name:   "service1",
+		CAFile: "ca.pem",
+	}, {
+		Name:   "service2",
+		CAFile: "ca.pem",
+	}}
+
+	require.False(t, linkedServicesEqual(services, nil))
+	require.True(t, linkedServicesEqual(services, services))
+
+	reversed := []*ConsulLinkedService{
+		services[1], services[0], // reversed
+	}
+
+	require.True(t, linkedServicesEqual(services, reversed))
+
+	different := []*ConsulLinkedService{
+		services[0], &ConsulLinkedService{
+			Name:   "service2",
+			CAFile: "ca.pem",
+			SNI:    "service2.consul",
+		},
+	}
+
+	require.False(t, linkedServicesEqual(services, different))
 }
 
 func TestConsulTerminatingConfigEntry_Validate(t *testing.T) {
-	// todo
+	t.Parallel()
+
+	t.Run("nil", func(t *testing.T) {
+		err := (*ConsulTerminatingConfigEntry)(nil).Validate()
+		require.NoError(t, err)
+	})
+
+	t.Run("no services", func(t *testing.T) {
+		err := (&ConsulTerminatingConfigEntry{
+			Services: make([]*ConsulLinkedService, 0),
+		}).Validate()
+		require.EqualError(t, err, "Consul Terminating Gateway requires at least one service")
+	})
+
+	t.Run("service invalid", func(t *testing.T) {
+		err := (&ConsulTerminatingConfigEntry{
+			Services: []*ConsulLinkedService{{
+				Name: "",
+			}},
+		}).Validate()
+		require.EqualError(t, err, "Consul Linked Service requires Name")
+	})
+
+	t.Run("ok", func(t *testing.T) {
+		err := (&ConsulTerminatingConfigEntry{
+			Services: []*ConsulLinkedService{{
+				Name: "service1",
+			}},
+		}).Validate()
+		require.NoError(t, err)
+	})
 }

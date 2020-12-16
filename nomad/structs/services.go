@@ -1817,7 +1817,7 @@ func (e *ConsulTerminatingConfigEntry) Validate() error {
 	}
 
 	if len(e.Services) == 0 {
-		return fmt.Errorf("Consul Terminating Gateway requires at least one linked service")
+		return fmt.Errorf("Consul Terminating Gateway requires at least one service")
 	}
 
 	for _, service := range e.Services {
