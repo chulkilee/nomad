@@ -3061,26 +3061,92 @@ func TestConversion_apiConnectSidecarServiceToStructs(t *testing.T) {
 	}))
 }
 
-func TestConversion_ApiConsulConnectToStructs_legacy(t *testing.T) {
+func TestConversion_ApiConsulConnectToStructs(t *testing.T) {
 	t.Parallel()
-	require.Nil(t, ApiConsulConnectToStructs(nil))
-	require.Equal(t, &structs.ConsulConnect{
-		Native:         false,
-		SidecarService: &structs.ConsulSidecarService{Port: "myPort"},
-		SidecarTask:    &structs.SidecarTask{Name: "task"},
-	}, ApiConsulConnectToStructs(&api.ConsulConnect{
-		Native:         false,
-		SidecarService: &api.ConsulSidecarService{Port: "myPort"},
-		SidecarTask:    &api.SidecarTask{Name: "task"},
-	}))
-}
 
-func TestConversion_ApiConsulConnectToStructs_native(t *testing.T) {
-	t.Parallel()
-	require.Nil(t, ApiConsulConnectToStructs(nil))
-	require.Equal(t, &structs.ConsulConnect{
-		Native: true,
-	}, ApiConsulConnectToStructs(&api.ConsulConnect{
-		Native: true,
-	}))
+	t.Run("nil", func(t *testing.T) {
+		require.Nil(t, ApiConsulConnectToStructs(nil))
+	})
+
+	t.Run("sidecar", func(t *testing.T) {
+		require.Equal(t, &structs.ConsulConnect{
+			Native:         false,
+			SidecarService: &structs.ConsulSidecarService{Port: "myPort"},
+			SidecarTask:    &structs.SidecarTask{Name: "task"},
+		}, ApiConsulConnectToStructs(&api.ConsulConnect{
+			Native:         false,
+			SidecarService: &api.ConsulSidecarService{Port: "myPort"},
+			SidecarTask:    &api.SidecarTask{Name: "task"},
+		}))
+	})
+
+	t.Run("ingress", func(t *testing.T) {
+		require.Equal(t, &structs.ConsulConnect{
+			Gateway: &structs.ConsulGateway{
+				Ingress: &structs.ConsulIngressConfigEntry{
+					TLS: &structs.ConsulGatewayTLSConfig{Enabled: true},
+					Listeners: []*structs.ConsulIngressListener{{
+						Port:     1111,
+						Protocol: "http",
+						Services: []*structs.ConsulIngressService{{
+							Name:  "ingress1",
+							Hosts: []string{"host1"},
+						}},
+					}},
+				},
+			},
+		}, ApiConsulConnectToStructs(
+			&api.ConsulConnect{
+				Gateway: &api.ConsulGateway{
+					Ingress: &api.ConsulIngressConfigEntry{
+						TLS: &api.ConsulGatewayTLSConfig{Enabled: true},
+						Listeners: []*api.ConsulIngressListener{{
+							Port:     1111,
+							Protocol: "http",
+							Services: []*api.ConsulIngressService{{
+								Name:  "ingress1",
+								Hosts: []string{"host1"},
+							}},
+						}},
+					},
+				},
+			},
+		))
+	})
+
+	t.Run("terminating", func(t *testing.T) {
+		require.Equal(t, &structs.ConsulConnect{
+			Gateway: &structs.ConsulGateway{
+				Terminating: &structs.ConsulTerminatingConfigEntry{
+					Services: []*structs.ConsulLinkedService{{
+						Name:     "linked-service",
+						CAFile:   "ca.pem",
+						CertFile: "cert.pem",
+						KeyFile:  "key.pem",
+						SNI:      "linked.consul",
+					}},
+				},
+			},
+		}, ApiConsulConnectToStructs(&api.ConsulConnect{
+			Gateway: &api.ConsulGateway{
+				Terminating: &api.ConsulTerminatingConfigEntry{
+					Services: []*api.ConsulLinkedService{{
+						Name:     "linked-service",
+						CAFile:   "ca.pem",
+						CertFile: "cert.pem",
+						KeyFile:  "key.pem",
+						SNI:      "linked.consul",
+					}},
+				},
+			},
+		}))
+	})
+
+	t.Run("native", func(t *testing.T) {
+		require.Equal(t, &structs.ConsulConnect{
+			Native: true,
+		}, ApiConsulConnectToStructs(&api.ConsulConnect{
+			Native: true,
+		}))
+	})
 }
