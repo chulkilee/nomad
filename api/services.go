@@ -303,7 +303,7 @@ type ConsulGateway struct {
 	Ingress *ConsulIngressConfigEntry `hcl:"ingress,block"`
 
 	// Terminating represents the Consul Configuration Entry for a Terminating Gateway.
-	Terminating *ConsulTerminatingConfigEntry
+	Terminating *ConsulTerminatingConfigEntry `hcl:"terminating,block"`
 
 	// Mesh is not yet supported.
 	// Mesh *ConsulMeshConfigEntry
