@@ -4366,6 +4366,7 @@ func (j *Job) ConfigEntries() map[string]*ConsulIngressConfigEntry {
 					igEntries[service.Name] = ig
 				}
 				// imagine also accumulating other entry types in the future
+				// todo terminating
 			}
 		}
 	}
@@ -7092,9 +7093,15 @@ func (k TaskKind) IsConnectIngress() bool {
 	return k.hasPrefix(ConnectIngressPrefix)
 }
 
+func (k TaskKind) IsConnectTerminating() bool {
+	return k.hasPrefix(ConnectTerminatingPrefix)
+}
+
 func (k TaskKind) IsAnyConnectGateway() bool {
 	switch {
 	case k.IsConnectIngress():
+		return true
+	case k.IsConnectTerminating():
 		return true
 	default:
 		return false
@@ -7117,8 +7124,7 @@ const (
 	// ConnectTerminatingPrefix is the prefix used for fields referencing a Consul
 	// Connect Terminating Gateway Proxy.
 	//
-	// Not yet supported.
-	// ConnectTerminatingPrefix = "connect-terminating"
+	ConnectTerminatingPrefix = "connect-terminating"
 
 	// ConnectMeshPrefix is the prefix used for fields referencing a Consul Connect
 	// Mesh Gateway Proxy.
