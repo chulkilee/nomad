@@ -86,8 +86,8 @@ func TestJobEndpointConnect_groupConnectHook(t *testing.T) {
 	// Expected tasks
 	tgExp := job.TaskGroups[0].Copy()
 	tgExp.Tasks = []*structs.Task{
-		newConnectTask("backend"),
-		newConnectTask("admin"),
+		newConnectSidecarTask("backend"),
+		newConnectSidecarTask("admin"),
 	}
 	tgExp.Services[0].Name = "backend"
 	tgExp.Services[1].Name = "admin"
@@ -129,7 +129,7 @@ func TestJobEndpointConnect_groupConnectHook_IngressGateway(t *testing.T) {
 	expTG := job.TaskGroups[0].Copy()
 	expTG.Tasks = []*structs.Task{
 		// inject the gateway task
-		newConnectGatewayTask("my-gateway", false),
+		newConnectGatewayTask(structs.ConnectIngressPrefix, "my-gateway", false),
 	}
 	expTG.Services[0].Name = "my-gateway"
 	expTG.Tasks[0].Canonicalize(job, expTG)
@@ -328,16 +328,27 @@ func TestJobEndpointConnect_groupConnectGatewayValidate(t *testing.T) {
 }
 
 func TestJobEndpointConnect_newConnectGatewayTask_host(t *testing.T) {
-	task := newConnectGatewayTask("service1", true)
-	require.Equal(t, "connect-ingress-service1", task.Name)
-	require.Equal(t, "connect-ingress:service1", string(task.Kind))
-	require.Equal(t, ">= 1.8.0", task.Constraints[0].RTarget)
-	require.Equal(t, "host", task.Config["network_mode"])
-	require.Nil(t, task.Lifecycle)
+	t.Run("ingress", func(t *testing.T) {
+		task := newConnectGatewayTask(structs.ConnectIngressPrefix, "foo", true)
+		require.Equal(t, "connect-ingress-foo", task.Name)
+		require.Equal(t, "connect-ingress:foo", string(task.Kind))
+		require.Equal(t, ">= 1.8.0", task.Constraints[0].RTarget)
+		require.Equal(t, "host", task.Config["network_mode"])
+		require.Nil(t, task.Lifecycle)
+	})
+
+	t.Run("terminating", func(t *testing.T) {
+		task := newConnectGatewayTask(structs.ConnectTerminatingPrefix, "bar", true)
+		require.Equal(t, "connect-terminating-bar", task.Name)
+		require.Equal(t, "connect-terminating:bar", string(task.Kind))
+		require.Equal(t, ">= 1.8.0", task.Constraints[0].RTarget)
+		require.Equal(t, "host", task.Config["network_mode"])
+		require.Nil(t, task.Lifecycle)
+	})
 }
 
 func TestJobEndpointConnect_newConnectGatewayTask_bridge(t *testing.T) {
-	task := newConnectGatewayTask("service1", false)
+	task := newConnectGatewayTask(structs.ConnectIngressPrefix, "service1", false)
 	require.NotContains(t, task.Config, "network_mode")
 }
 

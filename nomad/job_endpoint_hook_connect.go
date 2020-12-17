@@ -12,77 +12,75 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	// connectSidecarResources returns the set of resources used by default for
-	// the Consul Connect sidecar task
-	connectSidecarResources = func() *structs.Resources {
-		return &structs.Resources{
-			CPU:      250,
-			MemoryMB: 128,
-		}
+// connectSidecarResources returns the set of resources used by default for
+// the Consul Connect sidecar task
+func connectSidecarResources() *structs.Resources {
+	return &structs.Resources{
+		CPU:      250,
+		MemoryMB: 128,
+	}
+}
+
+// connectSidecarDriverConfig is the driver configuration used by the injected
+// connect proxy sidecar task.
+func connectSidecarDriverConfig() map[string]interface{} {
+	return map[string]interface{}{
+		"image": envoy.SidecarConfigVar,
+		"args": []interface{}{
+			"-c", structs.EnvoyBootstrapPath,
+			"-l", "${meta.connect.log_level}",
+			"--concurrency", "${meta.connect.proxy_concurrency}",
+			"--disable-hot-restart",
+		},
+	}
+}
+
+// connectGatewayDriverConfig is the Docker driver configuration used by the
+// injected connect proxy sidecar task.
+//
+// A gateway may run in a group with bridge or host networking, and if host
+// networking is being used the network_mode driver configuration is set here.
+func connectGatewayDriverConfig(hostNetwork bool) map[string]interface{} {
+	m := map[string]interface{}{
+		"image": envoy.GatewayConfigVar,
+		"args": []interface{}{
+			"-c", structs.EnvoyBootstrapPath,
+			"-l", "${meta.connect.log_level}",
+			"--concurrency", "${meta.connect.proxy_concurrency}",
+			"--disable-hot-restart",
+		},
 	}
 
-	// connectSidecarDriverConfig is the driver configuration used by the injected
-	// connect proxy sidecar task.
-	connectSidecarDriverConfig = func() map[string]interface{} {
-		return map[string]interface{}{
-			"image": envoy.SidecarConfigVar,
-			"args": []interface{}{
-				"-c", structs.EnvoyBootstrapPath,
-				"-l", "${meta.connect.log_level}",
-				"--concurrency", "${meta.connect.proxy_concurrency}",
-				"--disable-hot-restart",
-			},
-		}
+	if hostNetwork {
+		m["network_mode"] = "host"
 	}
 
-	// connectGatewayDriverConfig is the Docker driver configuration used by the
-	// injected connect proxy sidecar task.
-	//
-	// A gateway may run in a group with bridge or host networking, and if host
-	// networking is being used the network_mode driver configuration is set here.
-	connectGatewayDriverConfig = func(hostNetwork bool) map[string]interface{} {
-		m := map[string]interface{}{
-			"image": envoy.GatewayConfigVar,
-			"args": []interface{}{
-				"-c", structs.EnvoyBootstrapPath,
-				"-l", "${meta.connect.log_level}",
-				"--concurrency", "${meta.connect.proxy_concurrency}",
-				"--disable-hot-restart",
-			},
-		}
+	return m
+}
 
-		if hostNetwork {
-			m["network_mode"] = "host"
-		}
-
-		return m
+// connectSidecarVersionConstraint is used when building the sidecar task to ensure
+// the proper Consul version is used that supports the necessary Connect
+// features. This includes bootstrapping envoy with a unix socket for Consul's
+// gRPC xDS API.
+func connectSidecarVersionConstraint() *structs.Constraint {
+	return &structs.Constraint{
+		LTarget: "${attr.consul.version}",
+		RTarget: ">= 1.6.0-beta1",
+		Operand: structs.ConstraintSemver,
 	}
+}
 
-	// connectMinimalVersionConstraint is used when building the sidecar task to ensure
-	// the proper Consul version is used that supports the necessary Connect
-	// features. This includes bootstrapping envoy with a unix socket for Consul's
-	// gRPC xDS API.
-	connectMinimalVersionConstraint = func() *structs.Constraint {
-		return &structs.Constraint{
-			LTarget: "${attr.consul.version}",
-			RTarget: ">= 1.6.0-beta1",
-			Operand: structs.ConstraintSemver,
-		}
+// connectGatewayVersionConstraint is used when building a connect gateway
+// task to ensure proper Consul version is used that supports Connect Gateway
+// features. This includes making use of Consul Configuration Entries of type
+// {ingress,terminating,mesh}-gateway.
+func connectGatewayVersionConstraint() *structs.Constraint {
+	return &structs.Constraint{
+		LTarget: "${attr.consul.version}",
+		RTarget: ">= 1.8.0",
+		Operand: structs.ConstraintSemver,
 	}
-
-	// connectGatewayVersionConstraint is used when building a connect gateway
-	// task to ensure proper Consul version is used that supports Connect Gateway
-	// features. This includes making use of Consul Configuration Entries of type
-	// {ingress,terminating,mesh}-gateway.
-	connectGatewayVersionConstraint = func() *structs.Constraint {
-		return &structs.Constraint{
-			LTarget: "${attr.consul.version}",
-			RTarget: ">= 1.8.0",
-			Operand: structs.ConstraintSemver,
-		}
-	}
-)
+}
 
 // jobConnectHook implements a job Mutating and Validating admission controller
 type jobConnectHook struct{}
@@ -205,7 +203,7 @@ func groupConnectHook(job *structs.Job, g *structs.TaskGroup) error {
 
 			// If the task doesn't already exist, create a new one and add it to the job
 			if task == nil {
-				task = newConnectTask(service.Name)
+				task = newConnectSidecarTask(service.Name)
 
 				// If there happens to be a task defined with the same name
 				// append an UUID fragment to the task name
@@ -269,8 +267,8 @@ func groupConnectHook(job *structs.Job, g *structs.TaskGroup) error {
 
 			// inject the gateway task only if it does not yet already exist
 			if !hasGatewayTaskForService(g, service.Name) {
-				task := newConnectGatewayTask(service.Name, netHost)
-
+				prefix := service.Connect.Gateway.Prefix()
+				task := newConnectGatewayTask(prefix, service.Name, netHost)
 				g.Tasks = append(g.Tasks, task)
 
 				// the connect.sidecar_task stanza can also be used to configure
@@ -356,11 +354,11 @@ func gatewayBindAddresses(ingress *structs.ConsulIngressConfigEntry) map[string]
 	return addresses
 }
 
-func newConnectGatewayTask(serviceName string, netHost bool) *structs.Task {
+func newConnectGatewayTask(prefix, service string, netHost bool) *structs.Task {
 	return &structs.Task{
 		// Name is used in container name so must start with '[A-Za-z0-9]'
-		Name:          fmt.Sprintf("%s-%s", structs.ConnectIngressPrefix, serviceName),
-		Kind:          structs.NewTaskKind(structs.ConnectIngressPrefix, serviceName),
+		Name:          fmt.Sprintf("%s-%s", prefix, service),
+		Kind:          structs.NewTaskKind(prefix, service),
 		Driver:        "docker",
 		Config:        connectGatewayDriverConfig(netHost),
 		ShutdownDelay: 5 * time.Second,
@@ -375,11 +373,11 @@ func newConnectGatewayTask(serviceName string, netHost bool) *structs.Task {
 	}
 }
 
-func newConnectTask(serviceName string) *structs.Task {
+func newConnectSidecarTask(service string) *structs.Task {
 	return &structs.Task{
 		// Name is used in container name so must start with '[A-Za-z0-9]'
-		Name:          fmt.Sprintf("%s-%s", structs.ConnectProxyPrefix, serviceName),
-		Kind:          structs.NewTaskKind(structs.ConnectProxyPrefix, serviceName),
+		Name:          fmt.Sprintf("%s-%s", structs.ConnectProxyPrefix, service),
+		Kind:          structs.NewTaskKind(structs.ConnectProxyPrefix, service),
 		Driver:        "docker",
 		Config:        connectSidecarDriverConfig(),
 		ShutdownDelay: 5 * time.Second,
@@ -393,7 +391,7 @@ func newConnectTask(serviceName string) *structs.Task {
 			Sidecar: true,
 		},
 		Constraints: structs.Constraints{
-			connectMinimalVersionConstraint(),
+			connectSidecarVersionConstraint(),
 		},
 	}
 }

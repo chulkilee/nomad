@@ -1238,6 +1238,16 @@ type ConsulGateway struct {
 	// Mesh *ConsulMeshConfigEntry
 }
 
+func (g *ConsulGateway) Prefix() string {
+	switch {
+	case g.Ingress != nil:
+		return ConnectIngressPrefix
+	default:
+		return ConnectTerminatingPrefix
+	}
+	// also mesh
+}
+
 func (g *ConsulGateway) Copy() *ConsulGateway {
 	if g == nil {
 		return nil

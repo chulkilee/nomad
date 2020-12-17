@@ -610,6 +610,20 @@ var (
 	}
 )
 
+func TestConsulGateway_Prefix(t *testing.T) {
+	t.Run("ingress", func(t *testing.T) {
+		result := (&ConsulGateway{Ingress: new(ConsulIngressConfigEntry)}).Prefix()
+		require.Equal(t, ConnectIngressPrefix, result)
+	})
+
+	t.Run("terminating", func(t *testing.T) {
+		result := (&ConsulGateway{Terminating: new(ConsulTerminatingConfigEntry)}).Prefix()
+		require.Equal(t, ConnectTerminatingPrefix, result)
+	})
+
+	// also mesh
+}
+
 func TestConsulGateway_Copy(t *testing.T) {
 	t.Parallel()
 
