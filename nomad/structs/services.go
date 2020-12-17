@@ -733,10 +733,22 @@ func (c *ConsulConnect) IsNative() bool {
 	return c != nil && c.Native
 }
 
-// IsGateway checks if the service is a Connect gateway.
+// IsGateway checks if the service is any type of connect gateway.
 func (c *ConsulConnect) IsGateway() bool {
 	return c != nil && c.Gateway != nil
 }
+
+// IsIngress checks if the service is an ingress gateway.
+func (c *ConsulConnect) IsIngress() bool {
+	return c.IsGateway() && c.Gateway.Ingress != nil
+}
+
+// IsTerminating checks if the service is a terminating gateway.
+func (c *ConsulConnect) IsTerminating() bool {
+	return c.IsGateway() && c.Gateway.Terminating != nil
+}
+
+// also mesh
 
 // Validate that the Connect block represents exactly one of:
 // - Connect non-native service sidecar proxy
