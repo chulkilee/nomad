@@ -91,7 +91,7 @@ func (jobConnectHook) Name() string {
 	return "connect"
 }
 
-func (jobConnectHook) Mutate(job *structs.Job) (_ *structs.Job, warnings []error, err error) {
+func (jobConnectHook) Mutate(job *structs.Job) (*structs.Job, []error, error) {
 	for _, g := range job.TaskGroups {
 		// TG isn't validated yet, but validation
 		// may depend on mutation results.
@@ -110,13 +110,13 @@ func (jobConnectHook) Mutate(job *structs.Job) (_ *structs.Job, warnings []error
 	return job, nil, nil
 }
 
-func (jobConnectHook) Validate(job *structs.Job) (warnings []error, err error) {
+func (jobConnectHook) Validate(job *structs.Job) ([]error, error) {
+	var warnings []error
+
 	for _, g := range job.TaskGroups {
-		w, err := groupConnectValidate(g)
-		if err != nil {
+		if w, err := groupConnectValidate(g); err != nil {
 			return nil, err
-		}
-		if w != nil {
+		} else if w != nil {
 			warnings = append(warnings, w...)
 		}
 	}
@@ -143,15 +143,21 @@ func hasGatewayTaskForService(tg *structs.TaskGroup, svc string) bool {
 	for _, t := range tg.Tasks {
 		switch {
 		case isIngressGatewayForService(t, svc):
-			// also terminating and mesh in the future
+			return true
+		case isTerminatingGatewayForService(t, svc):
 			return true
 		}
+		// mesh later
 	}
 	return false
 }
 
 func isIngressGatewayForService(t *structs.Task, svc string) bool {
 	return t.Kind == structs.NewTaskKind(structs.ConnectIngressPrefix, svc)
+}
+
+func isTerminatingGatewayForService(t *structs.Task, svc string) bool {
+	return t.Kind == structs.NewTaskKind(structs.ConnectTerminatingPrefix, svc)
 }
 
 // getNamedTaskForNativeService retrieves the Task with the name specified in the

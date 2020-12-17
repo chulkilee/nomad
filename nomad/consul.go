@@ -503,6 +503,8 @@ func (c *consulConfigsAPI) SetTerminatingCE(ctx context.Context, service string,
 	return c.setCE(ctx, convertTerminatingCE(service, entry))
 }
 
+// also mesh
+
 // setCE will set the Configuration Entry of any type Consul supports.
 func (c *consulConfigsAPI) setCE(ctx context.Context, entry api.ConfigEntry) error {
 	defer metrics.MeasureSince([]string{"nomad", "consul", "create_config_entry"}, time.Now())

@@ -353,15 +353,23 @@ func TestJobEndpointConnect_hasGatewayTaskForService(t *testing.T) {
 		require.False(t, result)
 	})
 
-	t.Run("has gateway task", func(t *testing.T) {
+	t.Run("has ingress task", func(t *testing.T) {
 		result := hasGatewayTaskForService(&structs.TaskGroup{
 			Name: "group",
 			Tasks: []*structs.Task{{
-				Name: "task1",
-				Kind: "",
-			}, {
 				Name: "ingress-gateway-my-service",
 				Kind: structs.NewTaskKind(structs.ConnectIngressPrefix, "my-service"),
+			}},
+		}, "my-service")
+		require.True(t, result)
+	})
+
+	t.Run("has terminating task", func(t *testing.T) {
+		result := hasGatewayTaskForService(&structs.TaskGroup{
+			Name: "group",
+			Tasks: []*structs.Task{{
+				Name: "terminating-gateway-my-service",
+				Kind: structs.NewTaskKind(structs.ConnectTerminatingPrefix, "my-service"),
 			}},
 		}, "my-service")
 		require.True(t, result)
