@@ -550,7 +550,7 @@ func (e *ConsulIngressConfigEntry) Copy() *ConsulIngressConfigEntry {
 }
 
 type ConsulLinkedService struct {
-	Name     string `hcl:"name,label"`
+	Name     string `hcl:"name,optional"`
 	CAFile   string `hcl:"ca_file,optional"`
 	CertFile string `hcl:"cert_file,optional"`
 	KeyFile  string `hcl:"key_file,optional"`

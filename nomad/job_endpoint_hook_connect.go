@@ -263,7 +263,7 @@ func groupConnectHook(job *structs.Job, g *structs.TaskGroup) error {
 				// do the correct envoy bind address plumbing when inside a net
 				// namespace, but only if things are not explicitly configured.
 				service.Connect.Gateway.Proxy = gatewayProxyForBridge(service.Connect.Gateway)
-			}
+			} // TODO what about terminating?? YOU ARE HERE
 
 			// inject the gateway task only if it does not yet already exist
 			if !hasGatewayTaskForService(g, service.Name) {
