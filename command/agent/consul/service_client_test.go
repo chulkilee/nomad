@@ -3,12 +3,10 @@ package consul
 import (
 	"fmt"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/hashicorp/consul/api"
-	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/helper/testlog"
 	"github.com/hashicorp/nomad/nomad/structs"
 	"github.com/stretchr/testify/require"
@@ -337,13 +335,12 @@ func TestUpdateWorkload(t *testing.T) {
 	}
 
 	logger := testlog.HCLogger(t)
-	consulClient := NewMockConsulServiceClient(t, logger)
+	mockAgent := NewMockAgent()
 
-	svc := NewServiceClient(consulClient, logger, false)
+	svc := NewServiceClient(mockAgent, logger, false)
 
 	err := svc.UpdateWorkload(old, newWorkload)
 	require.NoError(t, err)
-
 }
 
 // MockConsulOp represents the register/deregister operations.
@@ -367,79 +364,4 @@ func NewMockConsulOp(op, allocID, name string) MockConsulOp {
 		Name:       name,
 		OccurredAt: time.Now(),
 	}
-}
-
-// MockConsulServiceClient implements the ConsulServiceAPI interface to record
-// and log task registration/deregistration.
-type MockConsulServiceClient struct {
-	ops []MockConsulOp
-	mu  sync.Mutex
-
-	logger log.Logger
-}
-
-func NewMockConsulServiceClient(t *testing.T, logger log.Logger) *MockConsulServiceClient {
-	logger = logger.Named("mock_consul")
-	m := MockConsulServiceClient{
-		ops:    make([]MockConsulOp, 0, 20),
-		logger: logger,
-	}
-	return &m
-}
-
-func (m *MockConsulServiceClient) UpdateWorkload(old, newSvcs *WorkloadServices) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.logger.Trace("UpdateWorkload", "alloc_id", newSvcs.AllocID, "name", newSvcs.Name(),
-		"old_services", len(old.Services), "new_services", len(newSvcs.Services),
-	)
-	m.ops = append(m.ops, NewMockConsulOp("update", newSvcs.AllocID, newSvcs.Name()))
-	return nil
-}
-
-func (m *MockConsulServiceClient) RegisterWorkload(svcs *WorkloadServices) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.logger.Trace("RegisterWorkload", "alloc_id", svcs.AllocID, "name", svcs.Name(),
-		"services", len(svcs.Services),
-	)
-	m.ops = append(m.ops, NewMockConsulOp("add", svcs.AllocID, svcs.Name()))
-	return nil
-}
-
-func (m *MockConsulServiceClient) RemoveWorkload(svcs *WorkloadServices) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.logger.Trace("RemoveWorkload", "alloc_id", svcs.AllocID, "name", svcs.Name(),
-		"services", len(svcs.Services),
-	)
-	m.ops = append(m.ops, NewMockConsulOp("remove", svcs.AllocID, svcs.Name()))
-}
-
-func (m *MockConsulServiceClient) AllocRegistrations(allocID string) (*AllocRegistration, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.logger.Trace("AllocRegistrations", "alloc_id", allocID)
-	m.ops = append(m.ops, NewMockConsulOp("alloc_registrations", allocID, ""))
-
-	return nil, nil
-}
-
-func (m *MockConsulServiceClient) UpdateTTL(checkID, output, status string) error {
-	// TODO(tgross): this method is here so we can implement the
-	// interface but the locking we need for testing creates a lot
-	// of opportunities for deadlocks in testing that will never
-	// appear in live code.
-	m.logger.Trace("UpdateTTL", "check_id", checkID, "status", status)
-	return nil
-}
-
-func (m *MockConsulServiceClient) CheckDeregister(string) error {
-	return nil
-}
-
-func (m *MockConsulServiceClient) GetOps() []MockConsulOp {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.ops
 }
