@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	consulapi "github.com/hashicorp/consul/api"
 	ctestutil "github.com/hashicorp/consul/sdk/testutil"
 	"github.com/hashicorp/nomad/client/allocrunner/interfaces"
@@ -92,6 +93,58 @@ func TestGroupServiceHook_ShutdownDelayUpdate(t *testing.T) {
 
 	// Assert that update updated the delay value
 	require.Equal(t, h.delay, 0*time.Second)
+}
+
+// TestGroupServiceHook_GroupServiceRemoved asserts calling group service hooks
+// update updates the hooks delay value.
+func TestGroupServiceHook_GroupServiceRemoved(t *testing.T) {
+	t.Parallel()
+
+	alloc := mock.Alloc()
+	alloc.Job.TaskGroups[0].Services = []*structs.Service{}
+
+	logger := testlog.HCLogger(t)
+	consulClient := consul.NewMockConsulServiceClient(t, logger)
+
+	h := newGroupServiceHook(groupServiceHookConfig{
+		alloc:          alloc,
+		consul:         consulClient,
+		restarter:      agentconsul.NoopRestarter(),
+		taskEnvBuilder: taskenv.NewBuilder(mock.Node(), alloc, nil, alloc.Job.Region),
+		logger:         logger,
+	})
+	require.NoError(t, h.Prerun())
+
+	// Incease shutdown Delay
+	alloc.Job.TaskGroups[0].Services = []*structs.Service{
+		{
+			Name:      "frontend",
+			PortLabel: "http",
+		},
+		{
+			Name:      "backend",
+			PortLabel: "http",
+		},
+	}
+	req := &interfaces.RunnerUpdateRequest{Alloc: alloc}
+	require.NoError(t, h.Update(req))
+
+	ops := consulClient.GetOps()
+	spew.Dump(ops)
+
+	require.Len(t, h.services, 2)
+
+	// Incease shutdown Delay
+	alloc.Job.TaskGroups[0].Services = []*structs.Service{
+		{
+			Name:      "backend",
+			PortLabel: "http",
+		},
+	}
+	req = &interfaces.RunnerUpdateRequest{Alloc: alloc}
+	require.NoError(t, h.Update(req))
+
+	require.Len(t, h.services, 1)
 }
 
 // TestGroupServiceHook_GroupServices asserts group service hooks with group

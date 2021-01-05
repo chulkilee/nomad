@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	log "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/client/allocrunner/interfaces"
 	"github.com/hashicorp/nomad/client/consul"
@@ -141,6 +142,7 @@ func (h *groupServiceHook) Update(req *interfaces.RunnerUpdateRequest) error {
 		// Prerun to do initial registration.
 		return nil
 	}
+	spew.Dump(oldWorkloadServices)
 
 	return h.consulClient.UpdateWorkload(oldWorkloadServices, newWorkloadServices)
 }
