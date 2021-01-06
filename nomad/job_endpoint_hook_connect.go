@@ -177,6 +177,24 @@ func getNamedTaskForNativeService(tg *structs.TaskGroup, serviceName, taskName s
 	return nil, errors.Errorf("task %s named by Consul Connect Native service %s->%s does not exist", taskName, tg.Name, serviceName)
 }
 
+func injectPort(group *structs.TaskGroup, label string) {
+	// check that port hasn't already been defined before adding it to tg
+	for _, p := range group.Networks[0].DynamicPorts {
+		if p.Label == label {
+			return
+		}
+	}
+
+	// inject a port of label that maps inside the bridge namespace
+	group.Networks[0].DynamicPorts = append(group.Networks[0].DynamicPorts, structs.Port{
+		Label: label,
+		// -1 is a sentinel value to instruct the
+		// scheduler to map the host's dynamic port to
+		// the same port in the netns.
+		To: -1,
+	})
+}
+
 // probably need to hack this up to look for checks on the service, and if they
 // qualify, configure a port for envoy to use to expose their paths.
 func groupConnectHook(job *structs.Job, g *structs.TaskGroup) error {
@@ -223,24 +241,8 @@ func groupConnectHook(job *structs.Job, g *structs.TaskGroup) error {
 			// Canonicalize task since this mutator runs after job canonicalization
 			task.Canonicalize(job, g)
 
-			makePort := func(label string) {
-				// check that port hasn't already been defined before adding it to tg
-				for _, p := range g.Networks[0].DynamicPorts {
-					if p.Label == label {
-						return
-					}
-				}
-				g.Networks[0].DynamicPorts = append(g.Networks[0].DynamicPorts, structs.Port{
-					Label: label,
-					// -1 is a sentinel value to instruct the
-					// scheduler to map the host's dynamic port to
-					// the same port in the netns.
-					To: -1,
-				})
-			}
-
 			// create a port for the sidecar task's proxy port
-			makePort(fmt.Sprintf("%s-%s", structs.ConnectProxyPrefix, service.Name))
+			injectPort(g, fmt.Sprintf("%s-%s", structs.ConnectProxyPrefix, service.Name))
 
 		case service.Connect.IsNative():
 			// find the task backing this connect native service and set the kind
@@ -258,12 +260,27 @@ func groupConnectHook(job *structs.Job, g *structs.TaskGroup) error {
 			service.Name = env.ReplaceEnv(service.Name)
 
 			netHost := g.Networks[0].Mode == "host"
-			if !netHost && service.Connect.Gateway.Ingress != nil {
-				// Modify the gateway proxy service configuration to automatically
-				// do the correct envoy bind address plumbing when inside a net
-				// namespace, but only if things are not explicitly configured.
-				service.Connect.Gateway.Proxy = gatewayProxyForBridge(service.Connect.Gateway)
-			} // TODO what about terminating?? YOU ARE HERE
+
+			if !netHost {
+				if service.Connect.IsGateway() {
+					// Modify the gateway proxy service configuration to automatically
+					// do the correct envoy bind address plumbing when inside a net
+					// namespace, but only if things are not explicitly configured.
+					service.Connect.Gateway.Proxy = gatewayProxyForBridge(service.Connect.Gateway)
+				}
+
+				if service.Connect.IsTerminating() {
+					if service.PortLabel == "" {
+						// Inject a dynamic port for the terminating gateway.
+						portLabel := fmt.Sprintf("%s-%s", structs.ConnectTerminatingPrefix, service.Name)
+						service.PortLabel = portLabel
+						injectPort(g, portLabel)
+						fmt.Println("SH: injected term port for:", service.Name)
+					}
+					// address needs to be 0.0.0.0; all we have is address_mode - what happens?
+					fmt.Println("SH term address mode:", service.AddressMode)
+				}
+			}
 
 			// inject the gateway task only if it does not yet already exist
 			if !hasGatewayTaskForService(g, service.Name) {
@@ -328,15 +345,23 @@ func gatewayProxyForBridge(gateway *structs.ConsulGateway) *structs.ConsulGatewa
 		proxy.Config = gateway.Proxy.Config
 	}
 
-	// magically set the fields where Nomad knows what to do
-	proxy.EnvoyGatewayNoDefaultBind = true
-	proxy.EnvoyGatewayBindTaggedAddresses = false
-	proxy.EnvoyGatewayBindAddresses = gatewayBindAddresses(gateway.Ingress)
+	// magically configure bind address(es) for bridge networking, per gateway type
+	switch {
+	case gateway.Ingress != nil:
+		proxy.EnvoyGatewayNoDefaultBind = true
+		proxy.EnvoyGatewayBindTaggedAddresses = false
+		proxy.EnvoyGatewayBindAddresses = gatewayBindAddressesIngress(gateway.Ingress)
+	case gateway.Terminating != nil:
+		// thinking this is handled by the service definition - it's a lot like a sidecar
+		proxy.EnvoyGatewayNoDefaultBind = false
+		proxy.EnvoyGatewayBindTaggedAddresses = false
+		proxy.EnvoyGatewayBindAddresses = nil // need a port
+	} // later: mesh
 
 	return proxy
 }
 
-func gatewayBindAddresses(ingress *structs.ConsulIngressConfigEntry) map[string]*structs.ConsulGatewayBindAddress {
+func gatewayBindAddressesIngress(ingress *structs.ConsulIngressConfigEntry) map[string]*structs.ConsulGatewayBindAddress {
 	if ingress == nil || len(ingress.Listeners) == 0 {
 		return nil
 	}

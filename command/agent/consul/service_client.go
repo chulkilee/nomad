@@ -855,6 +855,8 @@ func (c *ServiceClient) serviceRegs(ops *operations, service *structs.Service, w
 		return nil, fmt.Errorf("unable to get address for service %q: %v", service.Name, err)
 	}
 
+	fmt.Println("SH REGS service:", service.Name, "ip:", ip, "portL:", service.PortLabel, "port:", port)
+
 	// Determine whether to use tags or canary_tags
 	var tags []string
 	if workload.Canary && len(service.CanaryTags) > 0 {
@@ -900,6 +902,7 @@ func (c *ServiceClient) serviceRegs(ops *operations, service *structs.Service, w
 	case service.Connect.IsTerminating():
 		kind = api.ServiceKindTerminatingGateway
 	}
+	fmt.Println("SH SC kind:", kind)
 
 	// Build the Consul Service registration request
 	serviceReg := &api.AgentServiceRegistration{

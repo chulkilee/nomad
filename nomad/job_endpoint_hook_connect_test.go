@@ -430,17 +430,17 @@ func TestJobEndpointConnect_gatewayProxyIsDefault(t *testing.T) {
 
 func TestJobEndpointConnect_gatewayBindAddresses(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
-		result := gatewayBindAddresses(nil)
+		result := gatewayBindAddressesIngress(nil)
 		require.Nil(t, result)
 	})
 
 	t.Run("no listeners", func(t *testing.T) {
-		result := gatewayBindAddresses(&structs.ConsulIngressConfigEntry{Listeners: nil})
+		result := gatewayBindAddressesIngress(&structs.ConsulIngressConfigEntry{Listeners: nil})
 		require.Nil(t, result)
 	})
 
 	t.Run("simple", func(t *testing.T) {
-		result := gatewayBindAddresses(&structs.ConsulIngressConfigEntry{
+		result := gatewayBindAddressesIngress(&structs.ConsulIngressConfigEntry{
 			Listeners: []*structs.ConsulIngressListener{{
 				Port:     3000,
 				Protocol: "tcp",
@@ -458,7 +458,7 @@ func TestJobEndpointConnect_gatewayBindAddresses(t *testing.T) {
 	})
 
 	t.Run("complex", func(t *testing.T) {
-		result := gatewayBindAddresses(&structs.ConsulIngressConfigEntry{
+		result := gatewayBindAddressesIngress(&structs.ConsulIngressConfigEntry{
 			Listeners: []*structs.ConsulIngressListener{{
 				Port:     3000,
 				Protocol: "tcp",
