@@ -901,6 +901,16 @@ func (c *ServiceClient) serviceRegs(ops *operations, service *structs.Service, w
 		kind = api.ServiceKindIngressGateway
 	case service.Connect.IsTerminating():
 		kind = api.ServiceKindTerminatingGateway
+		// set the default port! (if bridge / default listener set)
+		// maybe patch this before-hand?
+		if nominal, exists := service.Connect.Gateway.Proxy.EnvoyGatewayBindAddresses["default"]; exists {
+			portLabel := fmt.Sprintf("%s-%s", structs.ConnectTerminatingPrefix, service.Name)
+			if dynPort, ok := workload.Ports.Get(portLabel); ok {
+				fmt.Println("SH got dynPort:", dynPort)
+				nominal.Port = dynPort.Value
+			}
+			fmt.Println("SH nominal:", nominal)
+		}
 	}
 	fmt.Println("SH SC kind:", kind)
 

@@ -1367,7 +1367,7 @@ func (a *ConsulGatewayBindAddress) Validate() error {
 		return fmt.Errorf("Consul Gateway Bind Address must be set")
 	}
 
-	if a.Port <= 0 {
+	if a.Port <= 0 && a.Port != -1 { // port -1 => nomad autofill
 		return fmt.Errorf("Consul Gateway Bind Address must set valid Port")
 	}
 

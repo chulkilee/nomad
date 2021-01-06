@@ -355,8 +355,13 @@ func gatewayProxyForBridge(gateway *structs.ConsulGateway) *structs.ConsulGatewa
 		// thinking this is handled by the service definition - it's a lot like a sidecar
 		proxy.EnvoyGatewayNoDefaultBind = false
 		proxy.EnvoyGatewayBindTaggedAddresses = false
-		proxy.EnvoyGatewayBindAddresses = nil // need a port
-	} // later: mesh
+		proxy.EnvoyGatewayBindAddresses = map[string]*structs.ConsulGatewayBindAddress{
+			"default": {
+				Address: "0.0.0.0",
+				Port:    -1, // sentinel for nomad to fill in later
+			}}
+	}
+	// later: mesh
 
 	return proxy
 }
