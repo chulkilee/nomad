@@ -730,7 +730,7 @@ func inplaceUpdate(ctx Context, eval *structs.Evaluation, job *structs.Job,
 			Shared: structs.AllocatedSharedResources{
 				DiskMB:   int64(update.TaskGroup.EphemeralDisk.SizeMB),
 				Ports:    update.Alloc.AllocatedResources.Shared.Ports,
-				Networks: update.Alloc.AllocatedResources.Shared.Networks,
+				Networks: update.Alloc.AllocatedResources.Shared.Networks.Copy(),
 			},
 		}
 		newAlloc.Metrics = ctx.Metrics()
